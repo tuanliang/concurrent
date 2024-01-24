@@ -1,7 +1,7 @@
 package cn.wolfcode.mq;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public class MQConstant {
     //登录事件的消息队列

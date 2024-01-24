@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.servlet.http.HttpServletRequest;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 登录操作
  */
 @RestController

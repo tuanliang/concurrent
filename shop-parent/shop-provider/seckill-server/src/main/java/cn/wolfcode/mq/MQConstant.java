@@ -1,7 +1,7 @@
 package cn.wolfcode.mq;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public class MQConstant {
     //订单队列

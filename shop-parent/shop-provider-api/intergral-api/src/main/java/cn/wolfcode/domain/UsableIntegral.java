@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 用户积分表
  */
 @Setter@Getter

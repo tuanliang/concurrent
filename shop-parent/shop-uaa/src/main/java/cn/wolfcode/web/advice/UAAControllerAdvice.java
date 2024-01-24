@@ -4,7 +4,7 @@ import cn.wolfcode.common.exception.CommonControllerAdvice;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 对Controller进行统一异常处理
  */
 @ControllerAdvice

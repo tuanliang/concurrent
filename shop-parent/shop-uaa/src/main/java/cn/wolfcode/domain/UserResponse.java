@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 用户在登录阶段返回给前端的对象
  */
 @Setter@Getter@AllArgsConstructor@NoArgsConstructor

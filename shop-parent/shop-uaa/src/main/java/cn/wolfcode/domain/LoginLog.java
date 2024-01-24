@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @Setter@Getter
 public class LoginLog implements Serializable {

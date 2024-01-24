@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 秒杀商品表
  */
 @Setter@Getter

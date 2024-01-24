@@ -3,7 +3,7 @@ package cn.wolfcode.common.web.anno;
 import java.lang.annotation.*;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)

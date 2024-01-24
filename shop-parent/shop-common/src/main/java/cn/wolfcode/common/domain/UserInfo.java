@@ -6,7 +6,7 @@ import lombok.Setter;
 import java.io.Serializable;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @Setter@Getter
 public class UserInfo implements Serializable {

@@ -3,7 +3,7 @@ package cn.wolfcode.util;
 import org.apache.commons.codec.digest.DigestUtils;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 登录加密算法
  */
 public class MD5Util {

@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 调用支付接口需要传入的对象
  */
 @Setter@Getter

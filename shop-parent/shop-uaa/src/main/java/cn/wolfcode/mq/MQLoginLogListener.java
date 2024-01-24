@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @Component
 @RocketMQMessageListener(consumerGroup = "LoginLogGroup",topic = MQConstant.LOGIN_TOPIC)

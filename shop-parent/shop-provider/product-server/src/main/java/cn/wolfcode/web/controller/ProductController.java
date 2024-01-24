@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @RestController
 @RequestMapping("/product")
@@ -20,4 +20,5 @@ import java.util.List;
 public class ProductController {
     @Autowired
     private IProductService productService;
+
 }

@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 用户TCC事务控制的日志表
  */
 @Setter@Getter

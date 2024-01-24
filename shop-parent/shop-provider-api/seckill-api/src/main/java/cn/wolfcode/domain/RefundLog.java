@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 退款时需要记录日志
  */
 @Setter@Getter

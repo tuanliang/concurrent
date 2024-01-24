@@ -1,7 +1,7 @@
 package cn.wolfcode.common.web;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public class CommonCodeMsg extends CodeMsg {
     private CommonCodeMsg(Integer code, String msg){

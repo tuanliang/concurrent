@@ -6,7 +6,7 @@ import lombok.Setter;
 import java.io.Serializable;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 调用退款接口需要传入的对象
  */
 @Setter@Getter

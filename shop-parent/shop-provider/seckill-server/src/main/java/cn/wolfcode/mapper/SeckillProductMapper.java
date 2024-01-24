@@ -5,7 +5,7 @@ import cn.wolfcode.domain.SeckillProduct;
 import java.util.List;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public interface SeckillProductMapper {
     /**

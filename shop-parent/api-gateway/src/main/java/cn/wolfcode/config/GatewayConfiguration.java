@@ -30,7 +30,7 @@ import javax.annotation.PostConstruct;
 import java.util.*;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 限流处理
  */
 @Configuration

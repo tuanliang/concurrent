@@ -1,7 +1,7 @@
 package cn.wolfcode.common.constants;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public class CommonConstants {
     public static final String TOKEN_NAME = "token";

@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 注册中心配置对象
  */
 @Configuration

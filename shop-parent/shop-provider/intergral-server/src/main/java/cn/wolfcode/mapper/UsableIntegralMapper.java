@@ -3,7 +3,7 @@ package cn.wolfcode.mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public interface UsableIntegralMapper {
     /**

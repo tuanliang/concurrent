@@ -3,7 +3,7 @@ import cn.wolfcode.domain.AccountTransaction;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public interface AccountTransactionMapper {
     /**

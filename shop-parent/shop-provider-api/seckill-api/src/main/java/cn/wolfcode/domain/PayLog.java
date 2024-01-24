@@ -6,7 +6,7 @@ import lombok.Setter;
 import java.util.Date;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 支付日志表
  */
 @Setter

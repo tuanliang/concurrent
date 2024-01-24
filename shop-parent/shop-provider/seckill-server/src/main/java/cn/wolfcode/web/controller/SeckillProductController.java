@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 秒杀商品信息查询
  */
 @RestController
@@ -21,4 +21,9 @@ import java.util.List;
 public class SeckillProductController {
     @Autowired
     private ISeckillProductService seckillProductService;
+
+    @RequestMapping("/queryByTime")
+    public Result<List<SeckillProductVo>>queryByTime(Integer time){
+        return Result.success(seckillProductService.queryByTime(time));
+    }
 }

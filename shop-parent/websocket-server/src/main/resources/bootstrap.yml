@@ -4,7 +4,7 @@ spring:
   cloud:
     nacos:
       config:
-        server-addr: 你的nacos的Ip地址:8848 #nacos中心地址
+        server-addr: 192.168.199.129:8848 #nacos中心地址
         file-extension: yaml # 配置文件格式
         shared-configs:
           - data-id: rocketmq-config-dev.yaml

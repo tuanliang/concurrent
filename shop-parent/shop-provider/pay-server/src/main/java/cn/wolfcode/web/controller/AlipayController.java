@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 @RestController
 @RequestMapping("/alipay")

@@ -6,7 +6,7 @@ import com.alibaba.fastjson.JSON;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public class UserUtil {
     /**

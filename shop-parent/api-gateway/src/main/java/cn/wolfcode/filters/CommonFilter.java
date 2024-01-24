@@ -13,7 +13,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 定义全局过滤器，功能如下:
  * 1.把客户端真实IP通过请求同的方式传递给微服务
  * 2.在请求头中添加FEIGN_REQUEST的请求头，值为0，标记请求不是Feign调用，而是客户端调用

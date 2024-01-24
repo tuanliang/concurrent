@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public interface ProductMapper {
     /**

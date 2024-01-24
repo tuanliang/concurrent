@@ -3,7 +3,7 @@ package cn.wolfcode.service;
 import cn.wolfcode.domain.OperateIntergralVo;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  */
 public interface IUsableIntegralService {
 }

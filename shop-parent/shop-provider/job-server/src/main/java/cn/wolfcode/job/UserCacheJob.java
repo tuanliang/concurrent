@@ -16,7 +16,7 @@ import java.util.Calendar;
 import java.util.Set;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 用于处理用户缓存的定时任务
  * 为了保证Redis中的内存的有效使用。
  * 我们默认保留7天内的用户缓存数据，每天凌晨的时候会把7天前的用户登录缓存数据删除掉

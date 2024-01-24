@@ -9,7 +9,7 @@ import com.dangdang.ddframe.job.lite.config.LiteJobConfiguration;
 import org.apache.commons.lang.StringUtils;
 
 /**
- * Created by lanxw
+ * Created by shiyi
  * 工具类，用于创建LiteJobConfiguration对象
  */
 public class ElasticJobUtil {
