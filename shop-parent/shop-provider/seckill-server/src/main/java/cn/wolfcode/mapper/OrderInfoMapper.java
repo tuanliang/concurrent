@@ -45,4 +45,12 @@ public interface OrderInfoMapper {
      * @return
      */
     int changeRefundStatus(@Param("orderNo") String outTradeNo, @Param("status") Integer statusRefund);
+
+    /**
+     * 根据手机号码和秒杀商品id查询订单对象
+     * @param userPhone
+     * @param seckillId
+     * @return
+     */
+    OrderInfo findByPhoneAndSeckillId(@Param("userPhone") String userPhone, @Param("seckillId") Long seckillId);
 }

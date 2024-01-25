@@ -6,9 +6,11 @@ import cn.wolfcode.domain.Product;
 import cn.wolfcode.domain.SeckillProduct;
 import cn.wolfcode.domain.SeckillProductVo;
 import cn.wolfcode.mapper.SeckillProductMapper;
+import cn.wolfcode.redis.SeckillRedisKey;
 import cn.wolfcode.service.ISeckillProductService;
 import cn.wolfcode.web.feign.ProductFeignApi;
 import cn.wolfcode.web.msg.SeckillCodeMsg;
+import com.alibaba.fastjson.JSON;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,5 +66,49 @@ public class SeckillProductServiceImpl implements ISeckillProductService {
             seckillProductVoList.add(vo);
         }
         return seckillProductVoList;
+    }
+
+    @Override
+    public SeckillProductVo find(Integer time, Long seckillId) {
+        // 1.查询秒杀商品对象
+        SeckillProduct seckillProduct = seckillProductMapper.getSeckillProductBySeckillId(seckillId);
+        // 2.根据id查询商品对象
+        List<Long>productIds = new ArrayList<>();// 复用feign方法，虽然只有一个id
+        productIds.add(seckillProduct.getProductId());
+        Result<List<Product>> result = productFeignApi.queryByIds(productIds);
+        if(result==null||result.hasError()){
+            throw new BusinessException(SeckillCodeMsg.PRODUCT_SERVER_ERROR);
+        }
+        Product product = result.getData().get(0);
+        // 3。将数据封装称vo对象
+        SeckillProductVo vo = new SeckillProductVo();
+        BeanUtils.copyProperties(product,vo);
+        BeanUtils.copyProperties(seckillProduct,vo);
+        vo.setCurrentCount(seckillProduct.getStockCount());
+        return vo;
+    }
+
+    @Override
+    public int dercStockCount(Long seckillId) {
+        return seckillProductMapper.decrStock(seckillId);
+    }
+
+    @Override
+    public List<SeckillProductVo> queryByTimeFromCache(Integer time) {
+        String key = SeckillRedisKey.SECKILL_PRODUCT_HASH.getRealKey(String.valueOf(time));
+        List<Object> objStrList = redisTemplate.opsForHash().values(key);
+        List<SeckillProductVo>seckillProductVoList = new ArrayList<>();
+        for (Object objStr : objStrList) {
+            seckillProductVoList.add(JSON.parseObject((String) objStr,SeckillProductVo.class));
+        }
+        return seckillProductVoList;
+    }
+
+    @Override
+    public SeckillProductVo findFromCache(Integer time, Long seckillId) {
+        String key = SeckillRedisKey.SECKILL_PRODUCT_HASH.getRealKey(String.valueOf(time));
+        Object obj = redisTemplate.opsForHash().get(key, String.valueOf(seckillId));
+        SeckillProductVo vo = JSON.parseObject((String)obj,SeckillProductVo.class);
+        return vo;
     }
 }

@@ -4,7 +4,10 @@
   <select id="find" resultType="cn.wolfcode.domain.OrderInfo" >
     select * from t_order_info where order_no = #{orderNo}
   </select>
-  <insert id="insert" useGeneratedKeys="true" keyProperty="id" >
+    <select id="findByPhoneAndSeckillId" resultType="cn.wolfcode.domain.OrderInfo">
+      select * from t_order_info where user_id = #{userPhone} and seckill_id=#{seckillId}
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" >
     insert into t_order_info (order_no,user_id,product_id,product_img,delivery_addr_id,product_name,product_price,seckill_price,status,create_date,pay_date,seckill_date,seckill_time,seckill_id,intergral)
             values
             (#{orderNo},#{userId},#{productId},#{productImg},#{deliveryAddrId},#{productName},#{productPrice},#{seckillPrice},#{status},#{createDate},#{payDate},#{seckillDate},#{seckillTime},#{seckillId},#{intergral})

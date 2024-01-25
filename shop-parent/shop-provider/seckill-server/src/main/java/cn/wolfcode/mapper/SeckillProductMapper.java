@@ -1,6 +1,7 @@
 package cn.wolfcode.mapper;
 
 import cn.wolfcode.domain.SeckillProduct;
+import cn.wolfcode.domain.SeckillProductVo;
 
 import java.util.List;
 
@@ -18,7 +19,7 @@ public interface SeckillProductMapper {
     /**
      * 对秒杀商品库存进行递减操作
      * @param seckillId
-     * @return
+     * @return 受影响的行数
      */
     int decrStock(Long seckillId);
 
@@ -35,4 +36,11 @@ public interface SeckillProductMapper {
      * @return
      */
     int getStockCount(Long seckillId);
+
+    /**
+     * 根据商品id查询对象
+     * @param seckillId
+     * @return
+     */
+    SeckillProduct getSeckillProductBySeckillId(Long seckillId);
 }

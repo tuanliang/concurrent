@@ -24,6 +24,13 @@ public class SeckillProductController {
 
     @RequestMapping("/queryByTime")
     public Result<List<SeckillProductVo>>queryByTime(Integer time){
-        return Result.success(seckillProductService.queryByTime(time));
+//        return Result.success(seckillProductService.queryByTime(time));
+        return Result.success(seckillProductService.queryByTimeFromCache(time));
+    }
+
+    @RequestMapping("/find")
+    public Result<SeckillProductVo>find(Integer time,Long seckillId){
+//        return Result.success(seckillProductService.find(time,seckillId));
+        return Result.success(seckillProductService.findFromCache(time,seckillId));
     }
 }
