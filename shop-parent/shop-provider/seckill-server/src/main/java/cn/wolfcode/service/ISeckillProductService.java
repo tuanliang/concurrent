@@ -44,4 +44,17 @@ public interface ISeckillProductService {
      * @return
      */
     SeckillProductVo findFromCache(Integer time, Long seckillId);
+
+    /**
+     * 查询数据库库存同步到redis
+     * @param time
+     * @param seckillId
+     */
+    void syncStockToRedis(Integer time, Long seckillId);
+
+    /**
+     * 增加库存
+     * @param seckillId
+     */
+    void incrStockCount(Long seckillId);
 }

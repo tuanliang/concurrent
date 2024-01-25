@@ -33,4 +33,10 @@ public interface IOrderInfoService {
      * @return
      */
     OrderInfo findByOrderNo(String orderNo);
+
+    /**
+     * 根据订单号，取消订单
+     * @param orderNo
+     */
+    void cancelOrder(String orderNo);
 }

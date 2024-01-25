@@ -111,4 +111,18 @@ public class SeckillProductServiceImpl implements ISeckillProductService {
         SeckillProductVo vo = JSON.parseObject((String)obj,SeckillProductVo.class);
         return vo;
     }
+
+    @Override
+    public void syncStockToRedis(Integer time, Long seckillId) {
+        SeckillProduct seckillProduct = seckillProductMapper.getSeckillProductBySeckillId(seckillId);
+        if(seckillProduct.getStockCount()>0){
+            String key = SeckillRedisKey.SECKILL_STOCK_COUNT_HASH.getRealKey(String.valueOf(time));
+            redisTemplate.opsForHash().put(key,String.valueOf(seckillId),String.valueOf(seckillProduct.getStockCount()));
+        }
+    }
+
+    @Override
+    public void incrStockCount(Long seckillId) {
+        seckillProductMapper.incrStock(seckillId);
+    }
 }

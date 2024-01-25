@@ -52,5 +52,6 @@ public class InitSeckillProductJob implements SimpleJob {
             // 优化：将库存同步到redis
             redisTemplate.opsForHash().put(seckillStockCountKey,String.valueOf(vo.getId()),String.valueOf(vo.getStockCount()));
         }
+            System.out.println("同步数据到redis");
     }
 }

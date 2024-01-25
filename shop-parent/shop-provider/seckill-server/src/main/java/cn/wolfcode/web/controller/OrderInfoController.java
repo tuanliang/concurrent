@@ -6,6 +6,8 @@ import cn.wolfcode.common.web.Result;
 import cn.wolfcode.common.web.anno.RequireLogin;
 import cn.wolfcode.domain.OrderInfo;
 import cn.wolfcode.domain.SeckillProductVo;
+import cn.wolfcode.mq.MQConstant;
+import cn.wolfcode.mq.OrderMessage;
 import cn.wolfcode.redis.SeckillRedisKey;
 import cn.wolfcode.service.IOrderInfoService;
 import cn.wolfcode.service.ISeckillProductService;
@@ -42,7 +44,7 @@ public class OrderInfoController {
     @RequireLogin
     public Result<String>doSeckill(Integer time, Long seckillId, HttpServletRequest request){
         // 1.判断是否处于抢购的时间
-        SeckillProductVo seckillProductVo = seckillProductService.find(time, seckillId);
+        SeckillProductVo seckillProductVo = seckillProductService.findFromCache(time, seckillId);
         boolean legalTime = DateUtil.isLegalTime(seckillProductVo.getStartDate(), seckillProductVo.getTime());
 //        if(!legalTime){
 //            return Result.error(CommonCodeMsg.ILLEGAL_OPERATION);
@@ -52,10 +54,17 @@ public class OrderInfoController {
         String token = request.getHeader(CommonConstants.TOKEN_NAME);
         // 根据token从redis中获取手机号
         String userPhone = UserUtil.getUserPhone(redisTemplate, token);
-        OrderInfo orderInfo = orderInfoService.findByPhoneAndSeckillId(userPhone,seckillId);
-        if(orderInfo!=null){
+
+        // 原本从数据库判断用户是否秒杀该商品 改为从redis的set中判断
+//        OrderInfo orderInfo = orderInfoService.findByPhoneAndSeckillId(userPhone,seckillId);
+//        if(orderInfo!=null){
+//            // 提示重复下单
+
+//            return Result.error(SeckillCodeMsg.REPEAT_SECKILL);
+//        }
+        String orderSetKey = SeckillRedisKey.SECKILL_ORDER_SET.getRealKey(String.valueOf(seckillId));
+        if(redisTemplate.opsForSet().isMember(orderSetKey,userPhone)){
             // 提示重复下单
-            System.out.println("11");
             return Result.error(SeckillCodeMsg.REPEAT_SECKILL);
         }
 
@@ -70,9 +79,13 @@ public class OrderInfoController {
         if(seckillProductVo.getStockCount()<=0){
             return Result.error(SeckillCodeMsg.SECKILL_STOCK_OVER);
         }
-        orderInfo = orderInfoService.doSeckill(userPhone,seckillProductVo);
+        
+//        OrderInfo orderInfo = orderInfoService.doSeckill(userPhone,seckillProductVo);
+        // 使用MQ方式进行异步下单
+        OrderMessage message = new OrderMessage(time, seckillId, token, Long.parseLong(userPhone));
+        rocketMQTemplate.syncSend(MQConstant.ORDER_PEDDING_TOPIC,message);
 
-        return Result.success();
+        return Result.success("成功进入秒杀队列，请耐心等待结果");
     }
 
     @RequestMapping("/find")

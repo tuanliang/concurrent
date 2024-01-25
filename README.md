@@ -446,7 +446,9 @@ public class SeckillFeignClient {
 }
 ```
 
-## 优化前面的秒杀列表和详情接口
+## 优化接口
+
+### 优化前面的秒杀列表和详情接口
 
 ```java
 @RequestMapping("/queryByTime")
@@ -489,7 +491,7 @@ public class SeckillFeignClient {
 
 ![登录注解3](.\图片\优化测试2.png)
 
- ## 优化秒杀功能，解决超卖问题
+### 优化秒杀功能，解决超卖问题
 
 ![登录注解3](.\图片\锁机制.png)
 
@@ -500,6 +502,20 @@ public class SeckillFeignClient {
 ![redis原子性递减控制秒杀请求](.\图片\redis原子性递减控制秒杀请求.png)
 
 ![redis原子性递减控制秒杀请求2](.\图片\redis原子性递减控制秒杀请求2.png)
+
+
+
+重复下单的优化：
+
+1.使用数据库唯一索引保证不会重复抢购
+
+2.使用redis的set结构优化查询
+
+
+
+![redis原子性递减控制秒杀请求2](.\图片\唯一索引.png)
+
+![redis原子性递减控制秒杀请求2](.\图片\redis原子性递减控制秒杀请求3.png)
 
 在秒杀服务OrderInfoController中加入
 
@@ -523,3 +539,376 @@ redisTemplate.delete(seckillStockCountKey);
 redisTemplate.opsForHash().put(seckillStockCountKey,String.valueOf(vo.getId()),String.valueOf(vo.getStockCount()));
 ```
 
+
+
+判断用户是否已下单
+
+```java
+// 原本从数据库判断用户是否秒杀该商品 改为从redis的set中判断
+//        OrderInfo orderInfo = orderInfoService.findByPhoneAndSeckillId(userPhone,seckillId);
+//        if(orderInfo!=null){
+//            // 提示重复下单
+//            return Result.error(SeckillCodeMsg.REPEAT_SECKILL);
+//        }
+        String orderSetKey = SeckillRedisKey.SECKILL_ORDER_SET.getRealKey(String.valueOf(seckillId));
+        if(redisTemplate.opsForSet().isMember(orderSetKey,userPhone)){
+            // 提示重复下单
+            return Result.error(SeckillCodeMsg.REPEAT_SECKILL);
+        }
+```
+
+````java
+ // 在redis中设置set集合，存储的是抢到商品用户的手机号码
+        String orderSetKey = SeckillRedisKey.SECKILL_ORDER_SET.getRealKey(String.valueOf(seckillProductVo.getId()));
+        redisTemplate.opsForSet().add(orderSetKey,userPhone);
+````
+
+### 优化之后测试秒杀接口
+
+没有超卖的问题
+
+![优化秒杀测试](.\图片\优化秒杀测试.png)
+
+
+
+## 异步下单分析
+
+![异步下单](.\图片\异步下单1.png)
+
+![异步下单](.\图片\异步下单2.png)
+
+
+
+![异步下单](.\图片\异步下单3.png)
+
+![异步下单](.\图片\异步下单4.png)
+
+
+
+## 小总结
+
+1.定时上架功能
+
+- 在虚拟中配置zookeeper,并在job-service-dev.yaml配置zookeeper地址
+- 定义Job类(分片处理)
+  - 远程调用秒杀服务,获取秒杀列表集合
+  - 删除之前的key
+  - 使用Hash结构存储秒杀列表
+- 在配置类中配置SpringJob对象.(分片3片,分片参数"0=10,1=12,2=14")
+- 修改秒杀列表接口(从redis中获取)
+- 修改秒杀详情接口(从redis中获取)
+- 通过Jmeter进行压测(不是必要)
+
+⒉.解决超卖的问题
+
+- 使用乐观锁的思想. 	`update t seckill product set stock count = stock count - 1 where id = #(seckilld} and stock count > 0`保证一定不会出现超卖的情况.
+- 上面的方式解决超卖的问题,但是大量请求进来,大部分请求都不能修改库存,造成数据库压力很大
+
+3.使用Redis原子性递减控制秒杀的人数
+
+- 目的减少请求进入到数据库中.
+- 在定时任务中,把库存同步到Redis,使用Hash接口(利用原子性递减)
+- 修改秒杀的逻辑
+  - 在Redis进行递减操作,获取剩余数量remainCountif(remainCount<0){
+    	//没有库存,抛出异常
+    }
+
+4.使用唯—索引解决重复下单的问题
+
+- 在数据库中建立user_id,seckill_id 唯一索引,可以保证不会出现重复下单情况
+- 在订单创建完成之后,往数据库中存储set集合. OrderSet:12 ===>[13088889999
+- 在秒杀接口判断用户是否重复下单,使用Redis的方法判断Set集合是否存在当前用户的phone.
+- 进行2.0压测
+
+5.分析异步下单情况
+
+- 一个秒杀商品有50个请求进入数据库,但是同一个场次可能会有很多的秒杀商品比如100个.同时会有100*50个请求同时进入到数据库中数据库压力大
+- 使用MQ进行异步处理.
+  - 如果解决处理结果通知.
+    - 使用Ajax轮询(定时器不断发送请求)
+    - 使用WebSocket建立长连接.
+
+
+
+## MQ异步下单
+
+```java
+//        OrderInfo orderInfo = orderInfoService.doSeckill(userPhone,seckillProductVo);
+        // 使用MQ方式进行异步下单
+        OrderMessage message = new OrderMessage(time, seckillId, token, Long.parseLong(userPhone));
+        rocketMQTemplate.syncSend(MQConstant.ORDER_PEDDING_TOPIC,message);
+```
+
+```java
+@Component
+@RocketMQMessageListener(consumerGroup = "peddingGroup",topic = MQConstant.ORDER_PEDDING_TOPIC)
+public class OrderPeddingQueueListener implements RocketMQListener<OrderMessage> {
+
+    @Autowired
+    private IOrderInfoService orderInfoService;
+    @Autowired
+    private ISeckillProductService seckillProductService;
+    @Autowired
+    private RocketMQTemplate rocketMQTemplate;
+
+    @Override
+    public void onMessage(OrderMessage orderMessage) {
+        OrderMQResult result = new OrderMQResult();
+        result.setToken(orderMessage.getToken());
+        String tag;
+        try{
+            SeckillProductVo vo = seckillProductService.findFromCache(orderMessage.getTime(), orderMessage.getSeckillId());
+            OrderInfo orderInfo = orderInfoService.doSeckill(String.valueOf(orderMessage.getUserPhone()), vo);
+            result.setOrderNo(orderInfo.getOrderNo());
+            tag=MQConstant.ORDER_RESULT_SUCCESS_TAG;
+        }catch (Exception e){
+            e.printStackTrace();
+            result.setTime(orderMessage.getTime());
+            result.setSeckillId(orderMessage.getSeckillId());
+            result.setCode(SeckillCodeMsg.SECKILL_ERROR.getCode());
+            result.setMsg(SeckillCodeMsg.SECKILL_ERROR.getMsg());
+            tag=MQConstant.ORDER_RESULT_FAIL_TAG;
+        }
+        rocketMQTemplate.syncSend(MQConstant.ORDER_RESULT_TOPIC+":"+tag,result);
+    }
+}
+```
+
+```java
+    @Bean
+    public ServerEndpointExporter serverEndpointExporter(){
+        return new ServerEndpointExporter();
+    }
+```
+
+```java
+@ServerEndpoint("/{token}")
+@Component
+public class OrderWSServer{
+    public static ConcurrentHashMap<String, Session>clients=new ConcurrentHashMap<>();
+
+    @OnOpen
+    public void onOpen(Session session, @PathParam("token") String token){
+        System.out.println("浏览器和服务器建立连接；"+token);
+        clients.put(token,session);
+    }
+    @OnClose
+    public void onClose(@PathParam("token") String token){
+        System.out.println("浏览器和服务器断开链接"+token);
+        clients.remove(token);
+    }
+    @OnError
+    public void onError(Throwable error){
+        error.printStackTrace();
+    }
+}
+```
+
+```java
+@Component
+@RocketMQMessageListener(consumerGroup = "OrderResultGroup",topic = MQConstants.ORDER_RESULT_TOPIC)
+public class OrderResultQueueListener implements RocketMQListener<OrderMQResult> {
+    @Override
+    public void onMessage(OrderMQResult orderMQResult) {
+        // 找到客户端
+        Session session = null;
+        int count = 3;
+        while(count-->0){
+            session = OrderWSServer.clients.get(orderMQResult.getToken());
+            if(session!=null){
+                // 说明已经拿到了，发送消息
+                try {
+                    session.getBasicRemote().sendText(JSON.toJSONString(orderMQResult));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return;
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+```
+
+### 预库存回补
+
+解决方案：
+
+查询数据库的库存，如果库存数量>0，将数值更新到redis中。
+
+这样可能会导致比如有10个请求都进入了mq中，第一个成功，此时数据库库存为9，第2个失败，此时将数据库库存9修改到redis中。还允许有9个发送请求，但因此在数据库方面设置了stock_count>0的查询条件，兜底方案。因此最终只能有10个秒杀成功
+
+```java
+@Component
+@RocketMQMessageListener(consumerGroup = "OrderResultFailGroup",
+        topic = MQConstant.ORDER_RESULT_TOPIC,selectorExpression = MQConstant.ORDER_RESULT_FAIL_TAG)
+public class OrderResutlFailQueueListenter implements RocketMQListener<OrderMQResult> {
+    @Autowired
+    private ISeckillProductService seckillProductService;
+    @Override
+    public void onMessage(OrderMQResult orderMQResult) {
+        System.out.println("失败进行预库存回补");
+        seckillProductService.syncStockToRedis(orderMQResult.getTime(),orderMQResult.getSeckillId());
+    }
+}
+```
+
+```java
+    @Override
+    public void syncStockToRedis(Integer time, Long seckillId) {
+        SeckillProduct seckillProduct = seckillProductMapper.getSeckillProductBySeckillId(seckillId);
+        if(seckillProduct.getStockCount()>0){
+            String key = SeckillRedisKey.SECKILL_STOCK_COUNT_HASH.getRealKey(String.valueOf(time));
+            redisTemplate.opsForHash().put(key,String.valueOf(seckillId),String.valueOf(seckillProduct.getStockCount()));
+        }
+    }
+```
+
+### 超时取消订单
+
+```java
+// 发送延迟消息
+Message<OrderMQResult> message = MessageBuilder.withPayload(result).build();       rocketMQTemplate.syncSend(MQConstant.ORDER_PAY_TIMEOUT_TOPIC,message,3000,MQConstant.ORDER_PAY_TIMEOUT_DELAY_LEVEL);
+```
+
+```java
+@Component
+@RocketMQMessageListener(consumerGroup = "OrderPayTimeOutGroup",topic = MQConstant.ORDER_PAY_TIMEOUT_TOPIC)
+public class OrderPayTimeOutQueueListener implements RocketMQListener<OrderMQResult> {
+
+    @Autowired
+    private IOrderInfoService orderInfoService;
+
+    @Override
+    public void onMessage(OrderMQResult orderMQResult) {
+        // 进入这，说明已经过10分钟了
+        // 取消订单
+        System.out.println("超时取消订单逻辑");
+        orderInfoService.cancelOrder(orderMQResult.getOrderNo());
+    }
+}
+```
+
+```java
+@Override
+    @Transactional
+    public void cancelOrder(String orderNo) {
+        System.out.println("超时取消订单开始。。。");
+
+        OrderInfo orderInfo = orderInfoMapper.find(orderNo);
+        // 判断订单是否处于未付款状态
+        if(OrderInfo.STATUS_ARREARAGE.equals(orderInfo.getStatus())){
+            // 修改订单状态
+            int effectCount = orderInfoMapper.updateCancelStatus(orderNo, OrderInfo.STATUS_TIMEOUT);
+            if(effectCount==0){
+                return;
+            }
+            // 真实库存回补
+            seckillProductService.incrStockCount(orderInfo.getSeckillId());
+            // 预库存回补
+            seckillProductService.syncStockToRedis(orderInfo.getSeckillTime(),orderInfo.getSeckillId());
+        }
+        System.out.println("超时取消订单结束。。。");
+
+    }
+```
+
+```java
+    @Override
+    public void incrStockCount(Long seckillId) {
+        seckillProductMapper.incrStock(seckillId);
+    }
+```
+
+## 支付宝支付
+
+
+
+![异步下单](.\图片\支付宝支付.png)
+
+
+
+内网穿透 `https://natapp.cn/`
+
+natapp配置步骤`[NATAPP1分钟快速新手图文教程 - NATAPP-内网穿透 基于ngrok的国内高速内网映射工具](https://natapp.cn/article/natapp_newbie)`
+
+
+
+## 小总结
+
+1.SpringBoot集成WebSocket
+
+- 添加依赖
+
+- 配置Bean,扫描@EndPointServer注解
+
+  ```java
+  @Bean
+  public ServerEndpointExporter serverEndpointExporter) {
+  	return new ServerEndpointExporter);
+  }
+  ```
+
+- 处理类
+
+  ```java
+  @serverEndpoint(" /{token}")
+  @Component
+  public class OrderWSServer {
+  	@OnOpen
+  	public void onOpen(Session session,@PathParam( "token")String token){}
+      ...
+  }
+  ```
+
+  @OnOpen:浏览器和服务器建立连接触发的方法
+
+  @OnMessage:接收到客户端的信息会触发的方法
+
+  @OnClose:客户端关闭的时候触发的方法
+  @OnError:连接出现异常的时候触发该方法
+
+- Websocket相关面试题
+
+  - 很多请求建立连接的时候应该如何应对?
+    使用nginx做负载,做集群．集群后使用MQ广播进行通知
+  - 客户端端口网络的情况下,如果将已经丢失链接释放.
+    需要心跳机制.
+  - 可以使用付费的websocket服务,比如GoEasy
+
+2.异步下单的功能
+
+- 在OrderlnfoController中变成异步下单
+  - 将参数封装OrderMessage对象(time,phone,seckillld,token)
+  - 使用RokcetMQTemplate发送消息
+- 在秒杀服务中写监听类
+  - 对秒杀方法的进行捕获异常.
+    - 如果没有异常
+      - 发送延时消息
+      - 发送结果消息(添加成功Tag)
+    - 如果有异常
+      - 发送结果消息(添加失败Tag)
+
+3.集成Websocket服务
+
+- 在OnOpen方法维护和客户端的映射关系,需要使用ConcurrentHashMap
+- 监听结果消息,获取里面的token找到客户端,进行消息发送(实现消息重试机制)
+
+4.处理预库存回补问题
+
+- 当进入队列之后,在进行秒杀的时候,请求出错了.预库存扣减了,但是真实库存没有扣减.出现商品少买的情况.增加预库存,放请求进来把库存消化了.
+- 进行消息结果的监听,在秒杀服务中写监听类需要对消息进行过滤,只需要失败的消息.
+  - 查询数据库的库存,如果大于0,将库存信息同步到Redis中
+
+5.处理超时支付取消订单逻辑
+
+- 秒杀成功之后,发送消息到延时队列.用于处理超时取消的订单
+- 在秒杀服务中写监听类
+  查询对应的订单的状态,是否为未支付-如果是未支付
+  - 修改订单状态(可能会有并发的情况出现,使用状态机)
+  - 真实库存+1
+  - 查询数据库同步预库存-如果是其他状态,不需要处理

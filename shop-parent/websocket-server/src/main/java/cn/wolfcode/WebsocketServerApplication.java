@@ -10,4 +10,8 @@ public class WebsocketServerApplication {
     public static void main(String[] args) {
         SpringApplication.run(WebsocketServerApplication.class, args);
     }
+    @Bean
+    public ServerEndpointExporter serverEndpointExporter(){
+        return new ServerEndpointExporter();
+    }
 }
