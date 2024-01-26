@@ -824,18 +824,6 @@ public class OrderPayTimeOutQueueListener implements RocketMQListener<OrderMQRes
     }
 ```
 
-## 支付宝支付
-
-
-
-![异步下单](.\图片\支付宝支付.png)
-
-
-
-内网穿透 `https://natapp.cn/`
-
-natapp配置步骤`[NATAPP1分钟快速新手图文教程 - NATAPP-内网穿透 基于ngrok的国内高速内网映射工具](https://natapp.cn/article/natapp_newbie)`
-
 
 
 ## 小总结
@@ -912,3 +900,209 @@ natapp配置步骤`[NATAPP1分钟快速新手图文教程 - NATAPP-内网穿透 
   - 修改订单状态(可能会有并发的情况出现,使用状态机)
   - 真实库存+1
   - 查询数据库同步预库存-如果是其他状态,不需要处理
+
+## 支付宝支付
+
+
+
+![异步下单](.\图片\支付宝支付.png)
+
+
+
+内网穿透 `https://natapp.cn/`
+
+natapp配置步骤`[NATAPP1分钟快速新手图文教程 - NATAPP-内网穿透 基于ngrok的国内高速内网映射工具](https://natapp.cn/article/natapp_newbie)`
+
+
+
+![支付](.\图片\支付.png)
+
+```java
+@RequestMapping("/pay")
+    public Result<String>pay(String orderNo,Integer type){
+        if(OrderInfo.PAYTYPE_ONLINE.equals(type)){
+            // 在线支付
+            return orderInfoService.payOnline(orderNo);
+        }else{
+            // 积分支付
+        return null;
+        }
+    }
+```
+
+```java
+public Result<String> payOnline(String orderNo) {
+        // 根据订单号查询订单对象
+        OrderInfo orderInfo = this.findByOrderNo(orderNo);
+        PayVo payVo = new PayVo();
+        payVo.setBody(orderInfo.getProductName());
+        payVo.setSubject(orderInfo.getProductName());
+        payVo.setOutTradeNo(orderNo);
+        payVo.setTotalAmount(String.valueOf(orderInfo.getSeckillPrice()));
+        Result<String>result=payFeignApi.payOnline(payVo);
+        return result;
+    }
+```
+
+```java
+@FeignClient(name = "pay-service",fallback = PayFeignApiFallback.class)
+public interface PayFeignApi {
+    @RequestMapping("/alipay/payOnline")
+    Result<String>payOnline(@RequestBody PayVo vo);
+}
+```
+
+```java
+@Component
+public class PayFeignApiFallback implements PayFeignApi {
+    @Override
+    public Result<String> payOnline(PayVo vo) {
+        return null;
+    }
+}
+```
+
+```java
+@RestController
+@RequestMapping("/alipay")
+public class AlipayController {
+    @Autowired
+    private AlipayClient alipayClient;
+    @Autowired
+    private AlipayProperties alipayProperties;
+
+    @RequestMapping("/payOnline")
+    public Result<String>payOnline(@RequestBody PayVo vo) throws AlipayApiException {
+        AlipayTradePagePayRequest alipayRequest = new AlipayTradePagePayRequest();
+        alipayRequest.setReturnUrl(vo.getReturnUrl());//同步通知地址
+        alipayRequest.setNotifyUrl(vo.getNotifyUrl());//异步通知地址
+        alipayRequest.setBizContent("{\"out_trade_no\":\""+ vo.getOutTradeNo() +"\","
+                + "\"total_amount\":\""+ vo.getTotalAmount() +"\","
+                + "\"subject\":\""+ vo.getSubject() +"\","
+                + "\"body\":\""+ vo.getBody() +"\","
+                + "\"product_code\":\"FAST_INSTANT_TRADE_PAY\"}");
+        String html = alipayClient.pageExecute(alipayRequest).getBody();
+        return Result.success(html);
+    }
+}
+```
+
+
+
+```java
+    // 异步回调
+    @RequestMapping("/notifyUrl")
+    public String notifyUrl(@RequestParam Map<String,String>params){
+        Result<Boolean>result=payFeignApi.rsaCheckV1(params);
+        if(result==null||result.hasError()){
+            return "fail";
+        }
+        Boolean signVerified = result.getData();// 验证SDK签名
+        if(signVerified){
+            // 验签成功，修改订单状态
+            String orderNo = params.get("out_trade_no");
+            int effectCount = orderInfoService.changePayStatus(orderNo, OrderInfo.STATUS_ACCOUNT_PAID, OrderInfo.PAYTYPE_ONLINE);
+            if(effectCount==0){
+                // 发消息给客服，走退款逻辑
+            }
+        }else{
+            // 验签失败
+        }
+        return "success";
+    }
+```
+
+```java
+    @RequestMapping("/alipay/rsaCheckV1")
+    Result<Boolean> rsaCheckV1(@RequestParam Map<String, String> params);
+```
+
+```java
+@RequestMapping("/alipay/rsaCheckV1")
+    public Result<Boolean> rsaCheckV1(@RequestParam Map<String, String> params) throws AlipayApiException {
+        boolean result = AlipaySignature.rsaCheckV1(params,
+                alipayProperties.getAlipayPublicKey(),
+                alipayProperties.getCharset(),
+                alipayProperties.getSignType()); //调用SDK验证签名
+        return Result.success(result);
+    }
+```
+
+```java
+@Value("${pay.errorUrl}")
+    private String errorUrl;
+    @Value("${pay.frontEndPayUrl}")
+    private String frontEndPayUrl;
+    @RequestMapping("/returnUrl")
+    // 同步回调
+    public void returnUrl(@RequestParam Map<String,String>params,HttpServletResponse response) throws IOException {
+        Result<Boolean> result = payFeignApi.rsaCheckV1(params);
+        if(result==null||result.hasError()||!result.getData()){
+            response.sendRedirect(errorUrl);
+            return;
+        }
+        String orderNo = params.get("out_trade_no");
+        response.sendRedirect(frontEndPayUrl+orderNo);
+    }
+```
+
+### 退款
+
+```java
+@RequestMapping("/pay")
+    public Result<String>pay(String orderNo,Integer type){
+        if(OrderInfo.PAYTYPE_ONLINE.equals(type)){
+            // 在线支付
+            return orderInfoService.payOnline(orderNo);
+        }else{
+            // 积分支付
+        return null;
+        }
+    }
+    @RequestMapping("/refund")
+    public Result<String>refund(String orderNo){
+        OrderInfo orderInfo = orderInfoService.findByOrderNo(orderNo);
+        if(OrderInfo.PAYTYPE_ONLINE.equals(orderInfo.getPayType())){
+            // 在线支付
+            orderInfoService.refundOnline(orderInfo);
+        }else{
+            // 积分支付
+        }
+        return Result.success();
+    }
+
+```
+
+```java
+public void refundOnline(OrderInfo orderInfo) {
+        RefundVo refundVo = new RefundVo();
+        refundVo.setOutTradeNo(orderInfo.getOrderNo());
+        refundVo.setRefundAmount(String.valueOf(orderInfo.getSeckillPrice()));
+        refundVo.setRefundReason("不想要了");
+        Result<Boolean>result = payFeignApi.refund(refundVo);
+        if(result==null||result.hasError()||!result.getData()){
+            throw new BusinessException(SeckillCodeMsg.REFUND_ERROR);
+        }
+        orderInfoMapper.changeRefundStatus(orderInfo.getOrderNo(),OrderInfo.STATUS_REFUND);
+    }
+```
+
+```java
+    @RequestMapping("/alipay/refund")
+    Result<Boolean> refund(@RequestBody RefundVo refundVo);
+```
+
+```java
+@RequestMapping("/refund")
+    public Result<Boolean> refund(@RequestBody RefundVo refundVo) throws AlipayApiException {
+        AlipayTradeRefundRequest alipayRequest = new AlipayTradeRefundRequest();
+        alipayRequest.setBizContent("{\"out_trade_no\":\""+ refundVo.getOutTradeNo() +"\","
+                + "\"trade_no\":\"\","
+                + "\"refund_amount\":\""+ refundVo.getRefundAmount() +"\","
+                + "\"refund_reason\":\""+ refundVo.getRefundReason() +"\","
+                + "\"out_request_no\":\"\"}");
+        AlipayTradeRefundResponse response = alipayClient.execute(alipayRequest);
+        return Result.success(response.isSuccess());
+    }
+```
+

@@ -28,4 +28,39 @@ public class AlipayController {
     private AlipayClient alipayClient;
     @Autowired
     private AlipayProperties alipayProperties;
+
+    @RequestMapping("/payOnline")
+    public Result<String>payOnline(@RequestBody PayVo vo) throws AlipayApiException {
+        AlipayTradePagePayRequest alipayRequest = new AlipayTradePagePayRequest();
+        alipayRequest.setReturnUrl(vo.getReturnUrl());//同步通知地址
+        alipayRequest.setNotifyUrl(vo.getNotifyUrl());//异步通知地址
+        alipayRequest.setBizContent("{\"out_trade_no\":\""+ vo.getOutTradeNo() +"\","
+                + "\"total_amount\":\""+ vo.getTotalAmount() +"\","
+                + "\"subject\":\""+ vo.getSubject() +"\","
+                + "\"body\":\""+ vo.getBody() +"\","
+                + "\"product_code\":\"FAST_INSTANT_TRADE_PAY\"}");
+        String html = alipayClient.pageExecute(alipayRequest).getBody();
+        return Result.success(html);
+    }
+
+    @RequestMapping("/rsaCheckV1")
+    public Result<Boolean> rsaCheckV1(@RequestParam Map<String, String> params) throws AlipayApiException {
+        boolean result = AlipaySignature.rsaCheckV1(params,
+                alipayProperties.getAlipayPublicKey(),
+                alipayProperties.getCharset(),
+                alipayProperties.getSignType()); //调用SDK验证签名
+        return Result.success(result);
+    }
+
+    @RequestMapping("/refund")
+    public Result<Boolean> refund(@RequestBody RefundVo refundVo) throws AlipayApiException {
+        AlipayTradeRefundRequest alipayRequest = new AlipayTradeRefundRequest();
+        alipayRequest.setBizContent("{\"out_trade_no\":\""+ refundVo.getOutTradeNo() +"\","
+                + "\"trade_no\":\"\","
+                + "\"refund_amount\":\""+ refundVo.getRefundAmount() +"\","
+                + "\"refund_reason\":\""+ refundVo.getRefundReason() +"\","
+                + "\"out_request_no\":\"\"}");
+        AlipayTradeRefundResponse response = alipayClient.execute(alipayRequest);
+        return Result.success(response.isSuccess());
+    }
 }

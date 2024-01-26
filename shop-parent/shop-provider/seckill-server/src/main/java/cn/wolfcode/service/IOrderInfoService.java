@@ -1,6 +1,7 @@
 package cn.wolfcode.service;
 
 
+import cn.wolfcode.common.web.Result;
 import cn.wolfcode.domain.OrderInfo;
 import cn.wolfcode.domain.SeckillProductVo;
 
@@ -39,4 +40,26 @@ public interface IOrderInfoService {
      * @param orderNo
      */
     void cancelOrder(String orderNo);
+
+    /**
+     * 获取支付服务返回的字符串
+     * @param orderNo
+     * @return
+     */
+    Result<String> payOnline(String orderNo);
+
+    /**
+     * 修改支付状态
+     * @param orderNo
+     * @param status
+     * @param payType
+     * @return
+     */
+    int changePayStatus(String orderNo, Integer status, int payType);
+
+    /**
+     * 进行在线退款
+     * @param orderInfo
+     */
+    void refundOnline(OrderInfo orderInfo);
 }
