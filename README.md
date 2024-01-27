@@ -1106,3 +1106,150 @@ public void refundOnline(OrderInfo orderInfo) {
     }
 ```
 
+
+
+## 积分支付
+
+![支付](.\图片\积分支付.png)
+
+```java
+            // 积分支付
+            orderInfoService.payIntegral(orderNo);
+            return Result.success();
+```
+
+```java
+@Override
+    @Transactional
+    public void payIntegral(String orderNo) {
+        OrderInfo orderInfo = this.findByOrderNo(orderNo);
+        if(orderInfo.STATUS_ARREARAGE.equals(orderInfo.getStatus())){
+            // 处于未支付状态
+            PayLog payLog = new PayLog();
+            payLog.setOrderNo(orderNo);
+            payLog.setPayTime(new Date());
+            payLog.setTotalAmount(Long.parseLong(String.valueOf(orderInfo.getSeckillPrice())));
+            payLog.setPayType(OrderInfo.PAYTYPE_INTERGRAL);
+            payLogMapper.insert(payLog);
+            // 远程调用积分服务完成积分扣减
+            OperateIntergralVo vo = new OperateIntergralVo();
+            vo.setUserId(orderInfo.getUserId());
+            vo.setValue(orderInfo.getIntergral());
+            // 调用积分服务
+            Result result = integralFeignApi.decrIntegral(vo);
+            if(result==null||result.hasError()){
+                throw new BusinessException(SeckillCodeMsg.INTERGRAL_SERVER_ERROR);
+            }
+            // 修改订单状态
+            int effectCount = orderInfoMapper.changePayStatus(orderNo, OrderInfo.STATUS_ACCOUNT_PAID, OrderInfo.PAYTYPE_INTERGRAL);
+            if(effectCount==0){
+                throw new BusinessException(SeckillCodeMsg.PAY_ERROR);
+            }
+        }
+    }
+```
+
+```java
+@FeignClient(name = "intergral-service",fallback = IntegralFeignFallback.class)
+public interface IntegralFeignApi {
+
+    @RequestMapping("/integral/decrIntegral")
+    Result decrIntegral(@RequestBody OperateIntergralVo vo);
+}
+```
+
+```java
+@Component
+public class IntegralFeignFallback implements IntegralFeignApi {
+    @Override
+    public Result decrIntegral(OperateIntergralVo vo) {
+        return null;
+    }
+}
+```
+
+
+
+```java
+    @RequestMapping("/decrIntegral")
+    public Result decrIntegral(@RequestBody OperateIntergralVo vo){
+        usableIntegralService.decrIntegral(vo);
+        return Result.success();
+    }
+```
+
+```java
+@Override
+    public void decrIntegral(OperateIntergralVo vo) {
+        int effectCount = usableIntegralMapper.decrIntergral(vo.getUserId(),vo.getValue());
+        if(effectCount==0){
+            throw new BusinessException(IntergralCodeMsg.INTERGRAL_NOT_ENOUGH);
+        }
+    }
+```
+
+
+
+```xml
+  <update id="decrIntergral">
+    update t_usable_integral
+    set
+    amount = amount - #{amount},
+    gmt_modified = now()
+    where user_id = #{userId} and amount >= #{amount}
+  </update>
+```
+
+### 积分退款
+
+```java
+@Override
+    @Transactional
+    public void refundIntegral(OrderInfo orderInfo) {
+        if(OrderInfo.STATUS_ACCOUNT_PAID.equals(orderInfo.getStatus())){
+            RefundLog log = new RefundLog();
+            log.setOrderNo(orderInfo.getOrderNo());
+            log.setRefundReason("不想要了");
+            log.setRefundAmount(orderInfo.getIntergral());
+            log.setRefundTime(new Date());
+            log.setRefundType(OrderInfo.PAYTYPE_INTERGRAL);
+            refundLogMapper.insert(log);
+            // 远程调用服务
+            OperateIntergralVo vo = new OperateIntergralVo();
+            vo.setUserId(orderInfo.getUserId());
+            vo.setValue(orderInfo.getIntergral());
+            // 调用积分服务
+            Result result = integralFeignApi.incrIntegral(vo);
+            if(result==null||result.hasError()){
+                throw new BusinessException(SeckillCodeMsg.INTERGRAL_SERVER_ERROR);
+            }
+            // 修改订单状态
+            int effectCount = orderInfoMapper.changeRefundStatus(orderInfo.getOrderNo(),OrderInfo.STATUS_REFUND)    ;
+            if(effectCount==0){
+                throw new BusinessException(SeckillCodeMsg.REFUND_ERROR);
+            }
+        }
+    }
+```
+
+```java
+@RequestMapping("/integral/incrIntegral")
+    Result incrIntegral(@RequestBody OperateIntergralVo vo);
+```
+
+```java
+@RequestMapping("/incrIntegral")
+    public Result incrIntegral(@RequestBody OperateIntergralVo vo){
+        usableIntegralService.incrIntegral(vo);
+        return Result.success();
+    }
+```
+
+```java
+@Override
+    public void incrIntegral(OperateIntergralVo vo) {
+        System.out.println("积分退款"+vo.getValue());
+        usableIntegralMapper.incrIntergral(vo.getUserId(),vo.getValue());
+    }
+```
+

@@ -37,17 +37,19 @@ public class OrderPayController {
             return orderInfoService.payOnline(orderNo);
         }else{
             // 积分支付
-        return null;
+            orderInfoService.payIntegral(orderNo);
+            return Result.success();
         }
     }
     @RequestMapping("/refund")
     public Result<String>refund(String orderNo){
         OrderInfo orderInfo = orderInfoService.findByOrderNo(orderNo);
         if(OrderInfo.PAYTYPE_ONLINE.equals(orderInfo.getPayType())){
-            // 在线支付
+            // 在线退款
             orderInfoService.refundOnline(orderInfo);
         }else{
-            // 积分支付
+            // 积分退款
+                orderInfoService.refundIntegral(orderInfo);
         }
         return Result.success();
     }

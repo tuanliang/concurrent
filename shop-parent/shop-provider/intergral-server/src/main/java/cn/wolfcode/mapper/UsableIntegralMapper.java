@@ -40,5 +40,5 @@ public interface UsableIntegralMapper {
      * @param userId
      * @param amount
      */
-    void decrIntergral(@Param("userId") Long userId, @Param("amount") Long amount);
+    int decrIntergral(@Param("userId") Long userId, @Param("amount") Long amount);
 }

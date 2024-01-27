@@ -12,9 +12,19 @@ import org.springframework.web.bind.annotation.RestController;
  * Created by shiyi
  */
 @RestController
-@RequestMapping("/intergral")
+@RequestMapping("/integral")
 public class IntegralController {
     @Autowired
     private IUsableIntegralService usableIntegralService;
 
+    @RequestMapping("/decrIntegral")
+    public Result decrIntegral(@RequestBody OperateIntergralVo vo){
+        usableIntegralService.decrIntegral(vo);
+        return Result.success();
+    }
+    @RequestMapping("/incrIntegral")
+    public Result incrIntegral(@RequestBody OperateIntergralVo vo){
+        usableIntegralService.incrIntegral(vo);
+        return Result.success();
+    }
 }

@@ -2,10 +2,7 @@ package cn.wolfcode.service.impl;
 
 import cn.wolfcode.common.exception.BusinessException;
 import cn.wolfcode.common.web.Result;
-import cn.wolfcode.domain.OrderInfo;
-import cn.wolfcode.domain.PayVo;
-import cn.wolfcode.domain.RefundVo;
-import cn.wolfcode.domain.SeckillProductVo;
+import cn.wolfcode.domain.*;
 import cn.wolfcode.mapper.OrderInfoMapper;
 import cn.wolfcode.mapper.PayLogMapper;
 import cn.wolfcode.mapper.RefundLogMapper;
@@ -13,6 +10,7 @@ import cn.wolfcode.redis.SeckillRedisKey;
 import cn.wolfcode.service.IOrderInfoService;
 import cn.wolfcode.service.ISeckillProductService;
 import cn.wolfcode.util.IdGenerateUtil;
+import cn.wolfcode.web.feign.IntegralFeignApi;
 import cn.wolfcode.web.feign.PayFeignApi;
 import cn.wolfcode.web.msg.SeckillCodeMsg;
 import org.springframework.beans.BeanUtils;
@@ -41,6 +39,8 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
     private RefundLogMapper refundLogMapper;
     @Autowired
     private PayFeignApi payFeignApi;
+    @Autowired
+    private IntegralFeignApi integralFeignApi;
 
     @Override
     public OrderInfo findByPhoneAndSeckillId(String userPhone, Long seckillId) {
@@ -112,15 +112,18 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
     public Result<String> payOnline(String orderNo) {
         // 根据订单号查询订单对象
         OrderInfo orderInfo = this.findByOrderNo(orderNo);
-        PayVo payVo = new PayVo();
-        payVo.setBody(orderInfo.getProductName());
-        payVo.setSubject(orderInfo.getProductName());
-        payVo.setOutTradeNo(orderNo);
-        payVo.setTotalAmount(String.valueOf(orderInfo.getSeckillPrice()));
-        payVo.setReturnUrl(returnUrl);
-        payVo.setNotifyUrl(notifyUrl);
-        Result<String>result=payFeignApi.payOnline(payVo);
-        return result;
+        if(OrderInfo.STATUS_ARREARAGE.equals(orderInfo.getStatus())){
+            PayVo payVo = new PayVo();
+            payVo.setBody(orderInfo.getProductName());
+            payVo.setSubject(orderInfo.getProductName());
+            payVo.setOutTradeNo(orderNo);
+            payVo.setTotalAmount(String.valueOf(orderInfo.getIntergral()));
+            payVo.setReturnUrl(returnUrl);
+            payVo.setNotifyUrl(notifyUrl);
+            Result<String>result=payFeignApi.payOnline(payVo);
+            return result;
+        }
+        return Result.error(SeckillCodeMsg.PAY_STATUS_CHANGE);
     }
 
     @Override
@@ -139,5 +142,62 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
             throw new BusinessException(SeckillCodeMsg.REFUND_ERROR);
         }
         orderInfoMapper.changeRefundStatus(orderInfo.getOrderNo(),OrderInfo.STATUS_REFUND);
+    }
+
+    @Override
+    @Transactional
+    public void payIntegral(String orderNo) {
+        OrderInfo orderInfo = this.findByOrderNo(orderNo);
+        if(orderInfo.STATUS_ARREARAGE.equals(orderInfo.getStatus())){
+            // 处于未支付状态
+            PayLog payLog = new PayLog();
+            payLog.setOrderNo(orderNo);
+            payLog.setPayTime(new Date());
+            payLog.setTotalAmount((String.valueOf(orderInfo.getSeckillPrice())));
+            payLog.setPayType(OrderInfo.PAYTYPE_INTERGRAL);
+            payLogMapper.insert(payLog);
+            // 远程调用积分服务完成积分扣减
+            OperateIntergralVo vo = new OperateIntergralVo();
+            vo.setUserId(orderInfo.getUserId());
+            vo.setValue(orderInfo.getIntergral());
+            // 调用积分服务
+            Result result = integralFeignApi.decrIntegral(vo);
+            if(result==null||result.hasError()){
+                throw new BusinessException(SeckillCodeMsg.INTERGRAL_SERVER_ERROR);
+            }
+            // 修改订单状态
+            int effectCount = orderInfoMapper.changePayStatus(orderNo, OrderInfo.STATUS_ACCOUNT_PAID, OrderInfo.PAYTYPE_INTERGRAL);
+            if(effectCount==0){
+                throw new BusinessException(SeckillCodeMsg.PAY_ERROR);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void refundIntegral(OrderInfo orderInfo) {
+        if(OrderInfo.STATUS_ACCOUNT_PAID.equals(orderInfo.getStatus())){
+            RefundLog log = new RefundLog();
+            log.setOrderNo(orderInfo.getOrderNo());
+            log.setRefundReason("不想要了");
+            log.setRefundAmount(orderInfo.getIntergral());
+            log.setRefundTime(new Date());
+            log.setRefundType(OrderInfo.PAYTYPE_INTERGRAL);
+            refundLogMapper.insert(log);
+            // 远程调用服务
+            OperateIntergralVo vo = new OperateIntergralVo();
+            vo.setUserId(orderInfo.getUserId());
+            vo.setValue(orderInfo.getIntergral());
+            // 调用积分服务
+            Result result = integralFeignApi.incrIntegral(vo);
+            if(result==null||result.hasError()){
+                throw new BusinessException(SeckillCodeMsg.INTERGRAL_SERVER_ERROR);
+            }
+            // 修改订单状态
+            int effectCount = orderInfoMapper.changeRefundStatus(orderInfo.getOrderNo(),OrderInfo.STATUS_REFUND)    ;
+            if(effectCount==0){
+                throw new BusinessException(SeckillCodeMsg.REFUND_ERROR);
+            }
+        }
     }
 }

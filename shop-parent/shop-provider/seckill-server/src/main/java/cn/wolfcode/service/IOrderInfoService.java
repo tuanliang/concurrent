@@ -62,4 +62,17 @@ public interface IOrderInfoService {
      * @param orderInfo
      */
     void refundOnline(OrderInfo orderInfo);
+
+    /**
+     * 积分支付
+     * @param orderNo
+     */
+    void payIntegral(String orderNo);
+
+    /**
+     * 积分退款
+     * @param orderInfo
+     */
+    void refundIntegral(OrderInfo orderInfo);
+
 }

@@ -36,6 +36,6 @@
     set
     amount = amount - #{amount},
     gmt_modified = now()
-    where user_id = #{userId}
+    where user_id = #{userId} and amount >= #{amount}
   </update>
 </mapper>
