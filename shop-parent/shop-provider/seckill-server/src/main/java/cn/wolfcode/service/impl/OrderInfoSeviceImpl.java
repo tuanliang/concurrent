@@ -13,6 +13,7 @@ import cn.wolfcode.util.IdGenerateUtil;
 import cn.wolfcode.web.feign.IntegralFeignApi;
 import cn.wolfcode.web.feign.PayFeignApi;
 import cn.wolfcode.web.msg.SeckillCodeMsg;
+import io.seata.spring.annotation.GlobalTransactional;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -145,7 +146,7 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
     }
 
     @Override
-    @Transactional
+    @GlobalTransactional
     public void payIntegral(String orderNo) {
         OrderInfo orderInfo = this.findByOrderNo(orderNo);
         if(orderInfo.STATUS_ARREARAGE.equals(orderInfo.getStatus())){
@@ -170,11 +171,12 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
             if(effectCount==0){
                 throw new BusinessException(SeckillCodeMsg.PAY_ERROR);
             }
+            int i =1/0;
         }
     }
 
     @Override
-    @Transactional
+    @GlobalTransactional
     public void refundIntegral(OrderInfo orderInfo) {
         if(OrderInfo.STATUS_ACCOUNT_PAID.equals(orderInfo.getStatus())){
             RefundLog log = new RefundLog();

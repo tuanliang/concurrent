@@ -19,7 +19,8 @@ public class IntegralController {
 
     @RequestMapping("/decrIntegral")
     public Result decrIntegral(@RequestBody OperateIntergralVo vo){
-        usableIntegralService.decrIntegral(vo);
+        System.out.println("11");
+        usableIntegralService.decrIntegralTry(vo,null);
         return Result.success();
     }
     @RequestMapping("/incrIntegral")

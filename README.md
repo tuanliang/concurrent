@@ -5,6 +5,7 @@
 nohup sh mqnamesrv &
 nohup sh mqbroker -n localhost:9876 -c /usr/local/rocketmq-4.4/conf/broker.conf &
 /usr/local/zookeeper-3.4.11/bin/zkServer.sh start
+nohup /usr/local/seata/bin/seata-server.sh -h 192.168.199.129 -p 7000 >log.out 2>1 &
 ```
 
 
@@ -1253,3 +1254,377 @@ public class IntegralFeignFallback implements IntegralFeignApi {
     }
 ```
 
+
+## 分布式事务
+
+![支付](.\图片\分布式事务问题.png)
+
+1中的connection和2中的connection不是一个。当1发生异常时2中的数据已经保存了，1中的数据会回滚
+
+
+
+解决方案：
+
+1.基于MQ最终实现消息一致性的方案
+
+![支付](.\图片\基于MQ最终实现消息一致性的方案.png)
+
+- 这种方案的局限性：
+  - 1.实时性不高
+  - 2.消费方一定能成功的业务（通过人工手段可以完成业务）（因为积分服务的失败不会导致秒杀服务的回滚）
+
+### 事务传播机制
+
+- REQUIRED(Spring默认的事务传播类型)
+  - 如果当前没有事务，则自己新建一个事务，如果当前存在事务，则加入这个事务
+
+  - *(示例1)*根据场景举栗子,我们在testMain和testB上声明事务，设置传播行为REQUIRED，伪代码如下：
+
+    ```java
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void testMain(){
+        A(a1);  //调用A入参a1
+        testB();    //调用testB
+    }
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void testB(){
+        B(b1);  //调用B入参b1
+        throw Exception;     //发生异常抛出
+        B(b2);  //调用B入参b2
+    }
+    ```
+
+    该场景下执行testMain方法结果如何呢？
+
+    数据库没有插入新的数据，数据库还是保持着执行testMain方法之前的状态，没有发生改变。testMain上声明了事务，在执行testB方法时就加入了testMain的事务（**当前存在事务，则加入这个事务**），在执行testB方法抛出异常后事务会发生回滚，又testMain和testB使用的同一个事务，所以事务回滚后testMain和testB中的操作都会回滚，也就使得数据库仍然保持初始状态
+
+    *(示例2)*根据场景再举一个栗子,我们只在testB上声明事务，设置传播行为REQUIRED，伪代码如下：
+
+    ```java
+    public void testMain(){
+        A(a1);  //调用A入参a1
+        testB();    //调用testB
+    }
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void testB(){
+        B(b1);  //调用B入参b1
+        throw Exception;     //发生异常抛出
+        B(b2);  //调用B入参b2
+    }
+    ```
+
+    这时的执行结果又如何呢？
+
+    数据a1存储成功，数据b1和b2没有存储。由于testMain没有声明事务，testB有声明事务且传播行为是REQUIRED，所以在执行testB时会自己新建一个事务（**如果当前没有事务，则自己新建一个事务**），testB抛出异常则只有testB中的操作发生了回滚，也就是b1的存储会发生回滚，但a1数据不会回滚，所以最终a1数据存储成功，b1和b2数据没有存储
+
+- SUPPORTS
+  - 当前存在事务，则加入当前事务，如果当前没有事务，就以非事务方法执行
+
+  - *(示例3)*根据场景举栗子，我们只在testB上声明事务，设置传播行为SUPPORTS，伪代码如下：
+
+    ```java
+    public void testMain(){
+        A(a1);  //调用A入参a1
+        testB();    //调用testB
+    }
+    @Transactional(propagation = Propagation.SUPPORTS)
+    public void testB(){
+        B(b1);  //调用B入参b1
+        throw Exception;     //发生异常抛出
+        B(b2);  //调用B入参b2
+    }
+    ```
+
+    这种情况下，执行testMain的最终结果就是，a1，b1存入数据库，b2没有存入数据库。由于testMain没有声明事务，且testB的事务传播行为是SUPPORTS，所以执行testB时就是没有事务的（**如果当前没有事务，就以非事务方法执行**），则在testB抛出异常时也不会发生回滚，所以最终结果就是a1和b1存储成功，b2没有存储。
+
+    那么当我们在testMain上声明事务且使用REQUIRED传播方式的时候，这个时候执行testB就满足**当前存在事务，则加入当前事务**，在testB抛出异常时事务就会回滚，最终结果就是a1，b1和b2都不会存储到数据库
+
+- MANDATORY
+  - 当前存在事务，则加入当前事务，如果当前事务不存在，则抛出异常。
+
+  - *(示例4)*场景举栗子，我们只在testB上声明事务，设置传播行为MANDATORY，伪代码如下：
+
+    ```java
+    public void testMain(){
+        A(a1);  //调用A入参a1
+        testB();    //调用testB
+    }
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void testB(){
+        B(b1);  //调用B入参b1
+        throw Exception;     //发生异常抛出
+        B(b2);  //调用B入参b2
+    }
+    ```
+
+    这种情形的执行结果就是a1存储成功，而b1和b2没有存储。b1和b2没有存储，并不是事务回滚的原因，而是因为testMain方法没有声明事务，在去执行testB方法时就直接抛出事务要求的异常（**如果当前事务不存在，则抛出异常**），所以testB方法里的内容就没有执行。
+
+    那么如果在testMain方法进行事务声明，并且设置为REQUIRED，则执行testB时就会使用testMain已经开启的事务，遇到异常就正常的回滚了。
+
+- ...
+
+![支付](.\图片\事务传播机制.png)
+
+- 存在的问题：
+  - 在1中异常，标记事务回滚，但是在2中将异常捕获了，那么在3中事务已经标记为回滚了，但是进行了提交，因此会有rollback的错误。但是不影响业务，只有抛异常，算是一个bug
+  - 解决方法，可以将3中的@Transactional删掉，或者在3中自己加上Throw new RuntimeException();
+
+- 在spring的文档中说道，spring声明式事务管理默认对非检查型异常和运行时异常进行事务回滚，而对检查型异常则不进行回滚操作。
+
+  - 那么什么是检查型异常什么又是非检查型异常呢？
+    最简单的判断点有两个：
+
+  - 1.继承自runtimeexception或error的是非检查型异常，而继承自exception的则是检查型异常（当然，runtimeexception本身也是exception的子类）。
+
+  - 2.对非检查型类异常可以不用捕获，而检查型异常则必须用try语句块进行处理或者把异常交给上级方法处理总之就是必须写代码处理它。所以必须在service捕获异常，然后再次抛出，这样事务方才起效。
+
+  - 如何改变默认规则：
+
+    1 让checked例外也回滚：在整个方法前加上 @Transactional(rollbackFor=Exception.class)
+
+    2 让unchecked例外不回滚： @Transactional(notRollbackFor=RunTimeException.class)
+
+    注意： 如果异常被try｛｝catch｛｝了，事务就不回滚了，如果想让事务回滚必须再往外抛try｛｝catch｛throw Exception｝。
+
+### seata
+
+![seata分布式事务1](.\图片\seata分布式事务1.png)
+
+![seata分布式事务1](.\图片\seata分布式事务2.png)
+
+![seata分布式事务1](.\图片\seata分布式事务3.png)
+
+在项目中添加依赖
+
+```xml
+ <dependency>
+	<groupId>com.alibaba.cloud</groupId>
+	<artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+	<version>2.2.2.RELEASE</version>
+	<exclusions>
+		<exclusion>
+            <groupId>io.seata</groupId>
+			<artifactId>seata-spring-boot-starter</artifactId>
+		</exclusion>
+	</exclusions>
+</dependency>
+<dependency>
+	<groupId>io.seata</groupId>
+	<artifactId>seata-spring-boot-starter</artifactId>
+	<version>1.3.0</version>
+</dependency>
+```
+
+在配置文件中添加如下配置
+
+```yaml
+seata:
+  tx-service-group: seckill-service-group
+  registry:
+    type: nacos
+    nacos:
+      server-addr: ${spring.cloud.nacos.config.server-addr}
+      group: SEATA_GROUP
+      application: seata-server
+  service:
+    vgroup-mapping:
+      seckill-service-group: default
+```
+
+
+
+这个存在分布式事务问题,存在积分表数据增加，而订单表状态没修改
+
+```java
+    @Override
+    @Transactional
+    public void refundIntegral(OrderInfo orderInfo) {
+        if(OrderInfo.STATUS_ACCOUNT_PAID.equals(orderInfo.getStatus())){
+            RefundLog log = new RefundLog();
+           ...
+            // 远程调用服务
+            OperateIntergralVo vo = new OperateIntergralVo();
+            vo.setUserId(orderInfo.getUserId());
+            vo.setValue(orderInfo.getIntergral());
+            // 调用积分服务
+            Result result = integralFeignApi.incrIntegral(vo);
+            ...
+            // 修改订单状态
+            int effectCount = orderInfoMapper.changeRefundStatus(orderInfo.getOrderNo(),OrderInfo.STATUS_REFUND)    ;
+            ...
+            int i=1/0;
+        }
+    }
+```
+
+解决：
+
+```java
+    @Override
+    @GlobalTransactional
+    public void refundIntegral(OrderInfo orderInfo) {
+```
+
+### TCC
+
+结合另一篇笔记看
+
+![seata分布式事务1](.\图片\TCC.png)
+
+空回滚：
+
+![seata分布式事务1](.\图片\空回滚.png)
+
+幂等处理
+
+![seata分布式事务1](.\图片\幂等处理.png)
+
+### 积分退款
+
+```java
+usableIntegralService.decrIntegralTry(vo,null);
+```
+
+```java
+@LocalTCC
+public interface IUsableIntegralService {
+    /**
+     * TCC中的try方法
+     * @param vo
+     */
+    @TwoPhaseBusinessAction(name = "decrIntegralTry",commitMethod = "decrIntegralCommit",rollbackMethod = "decrIntegralRollback")
+    void decrIntegralTry(@BusinessActionContextParameter(paramName = "vo") OperateIntergralVo vo, BusinessActionContext context);
+    void decrIntegralCommit(BusinessActionContext context);
+    void decrIntegralRollback(BusinessActionContext context);
+}
+```
+
+```java
+@Override
+    @GlobalTransactional
+    public void decrIntegralTry(OperateIntergralVo vo, BusinessActionContext context) {
+        System.out.println("执行try方法");
+        // 插入事务控制表
+        AccountTransaction log = new AccountTransaction();
+        Date now = new Date();
+        log.setAmount(vo.getValue());
+        log.setUserId(vo.getUserId());
+        log.setTxId(context.getXid());//全局事务ID
+        log.setActionId(context.getBranchId());// 分支事务ID
+        log.setGmtCreated(now);
+        log.setGmtModified(now);
+        accountTransactionMapper.insert(log);
+        // 执行业务逻辑--》减积分
+        int effectCount = usableIntegralMapper.decrIntergral(vo.getUserId(), vo.getValue());
+        if(effectCount==0){
+            throw new BusinessException(IntergralCodeMsg.INTERGRAL_NOT_ENOUGH);
+        }
+    }
+
+    @Override
+    public void decrIntegralCommit(BusinessActionContext context) {
+        System.out.println("执行commit方法");
+        // 查询事务记录
+        AccountTransaction accountTransaction = accountTransactionMapper.get(context.getXid(), context.getBranchId());
+        if(accountTransaction==null){
+            // 如果为空--》写MQ通知管理员
+        }else{
+            // 如果不为空：
+            if(AccountTransaction.STATE_TRY==accountTransaction.getState()){
+                //状态为try执行commit逻辑
+                // 跟新日志状态,空操作
+                int effectCount = accountTransactionMapper.updateAccountTransactionState(context.getXid(), context.getBranchId(), AccountTransaction.STATE_COMMIT, AccountTransaction.STATE_TRY);
+
+            }else if(AccountTransaction.STATE_COMMIT==accountTransaction.getState()){
+                // 状态为commit不做事情
+            }else{
+//                状态为其他写MQ通知管理员
+            }
+        }
+
+    }
+
+    @Override
+    @Transactional
+    public void decrIntegralRollback(BusinessActionContext context) {
+        System.out.println("执行rollback方法");
+        // 查询事务记录
+        AccountTransaction accountTransaction = accountTransactionMapper.get(context.getXid(), context.getBranchId());
+        if(accountTransaction!=null){
+            // 存在日志记录
+            if(AccountTransaction.STATE_TRY==accountTransaction.getState()){
+                // 处于try状态，将状态修改为cancel状态
+                accountTransactionMapper.updateAccountTransactionState(context.getXid(),context.getBranchId(),AccountTransaction.STATE_COMMIT,AccountTransaction.STATE_TRY);
+                // 执行cancel业务逻辑，添加积分
+
+                usableIntegralMapper.incrIntergral(accountTransaction.getUserId(),accountTransaction.getAmount());
+            }else if(AccountTransaction.STATE_COMMIT==accountTransaction.getState()){
+                // 之前执行过cancel，幂等处理
+            }else{
+                // 其他情况，通知管理员
+            }
+        }else {
+            // 插入事务控制表
+            String str = (String) context.getActionContext("vo");
+            System.out.println("存储的上下问对象："+str);
+            OperateIntergralVo vo = JSON.parseObject(str,OperateIntergralVo.class);
+            AccountTransaction log = new AccountTransaction();
+            Date now = new Date();
+            log.setAmount(vo.getValue());
+            log.setUserId(vo.getUserId());
+            log.setTxId(context.getXid());//全局事务ID
+            log.setActionId(context.getBranchId());// 分支事务ID
+            log.setGmtCreated(now);
+            log.setGmtModified(now);
+            log.setState(AccountTransaction.STATE_CANCEL);
+            accountTransactionMapper.insert(log);
+        }
+    }
+```
+
+## 小总结
+
+- Seata-AT模式.(属于两阶段提交)
+
+  - 发起方向TC注册全局事务和分支事务
+  - 方法方调用其他服务的时候,其他服务也需要向TC注册分支事务
+  - 所有服务都调用了成功,发起方调用没有问题,通知TC．TC通知所有的分支事务进行commit操作
+  - 其中有服务出现异常,发起方识别到异常,抛出异常.通知TC,通知所有的分支事务进行rollback操作
+  - 每个服务中都需要有undolog日志,和业务表处于同一事务,保证原子性.
+  - 当进行commit操作的时候本地只是把undolog记录删除
+  - 当进行rollback操作的时候,本地基于undolog进行数据库的回滚并删除记录.
+  - 当commit和commit都需要通知TC执行结果,如果TC没有收到执行结果,定期给服务发送请求直到执行成功为止.
+
+- 2.项目集成Seata-AT模式
+
+  - 启动seata-server(相当于TC),按照文档部署一下.
+  - 在需要集成分布式事务的项目中添加seata依赖.
+  - 在配置文件中配置seata的信息.
+  - 在发起方贴@GlobalTransactional
+
+- 3.TCC模式,也属于两阶段提交
+
+  TRY阶段:预留资源
+
+  CONFIRM阶段:执行预留资源
+
+  CANCEL阶段:释放预留资源
+
+  - 空回滚: try方法没有执行,执行Cancel.解决方案:使用日志表Try方法执行插入记录Cancel需要判断是否有记录.如果没有就属于空回滚不做事情.
+  - 幂等: try和confirm有可能会被多次调用,要保证接口幂等性.通过日志表状态机方式解决
+  - 防悬挂: Cance比try更早执行.判断是否有try的日志如果没有cancel插入日志,状态为cancel. try方法来到之后插入记录但是会报主键异常,不做事情,
+
+- 4.项目集成Seata-TCC模式.
+  Seata支持不同模式混用.
+
+  秒杀服务保持不动
+  在积分服务的接口上贴注解
+
+  ```java
+  @LocalTCC
+  public interface lUsablelntegralService {
+  @TwoPhaseBusinessAction(name = "decrintegralTry ;commitMethod = 'decrIntegralCommit,rollbackMethod = "decrntegralRollback'")void decrIntegralTry(@BusinessActionContextParameter(paramName = ".vo')OperatelntergralVo vo, BusinessActionContext context);
+  void decrlntegralCommit(BusinessActionContext context);
+  void decrlntegralRollback(BusinessActionContext context);
+  }
+  ```
