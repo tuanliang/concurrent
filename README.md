@@ -6,6 +6,7 @@ nohup sh mqnamesrv &
 nohup sh mqbroker -n localhost:9876 -c /usr/local/rocketmq-4.4/conf/broker.conf &
 /usr/local/zookeeper-3.4.11/bin/zkServer.sh start
 nohup /usr/local/seata/bin/seata-server.sh -h 192.168.199.129 -p 7000 >log.out 2>1 &
+sh /tmp/canal/bin/startup.sh
 ```
 
 
@@ -1628,3 +1629,11 @@ public interface IUsableIntegralService {
   void decrlntegralRollback(BusinessActionContext context);
   }
   ```
+
+
+
+## canal
+
+![seata分布式事务1](.\图片\mysql主从.png)
+
+![seata分布式事务1](.\图片\canal1.png)

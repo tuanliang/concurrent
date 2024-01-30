@@ -13,6 +13,7 @@ import cn.wolfcode.util.IdGenerateUtil;
 import cn.wolfcode.web.feign.IntegralFeignApi;
 import cn.wolfcode.web.feign.PayFeignApi;
 import cn.wolfcode.web.msg.SeckillCodeMsg;
+import com.alibaba.fastjson.JSON;
 import io.seata.spring.annotation.GlobalTransactional;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,15 +59,18 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
         }
         // 5.创建秒杀订单
         OrderInfo orderInfo = createOrderInfo(userPhone,seckillProductVo);
-        // 在redis中设置set集合，存储的是抢到商品用户的手机号码
-        String orderSetKey = SeckillRedisKey.SECKILL_ORDER_SET.getRealKey(String.valueOf(seckillProductVo.getId()));
-        redisTemplate.opsForSet().add(orderSetKey,userPhone);
+
         return  orderInfo;
     }
 
     @Override
     public OrderInfo findByOrderNo(String orderNo) {
-        return orderInfoMapper.find(orderNo);
+//        orderInfoMapper.find(orderNo)
+        // 从redis中查询
+        System.out.println("进入redis查订单");
+        String orderHashKey = SeckillRedisKey.SECKILL_ORDER_HASH.getRealKey("");
+        String objStr = (String) redisTemplate.opsForHash().get(orderHashKey, orderNo);
+        return JSON.parseObject(objStr,OrderInfo.class);
     }
 
     private OrderInfo createOrderInfo(String userPhone, SeckillProductVo seckillProductVo) {
@@ -171,7 +175,6 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
             if(effectCount==0){
                 throw new BusinessException(SeckillCodeMsg.PAY_ERROR);
             }
-            int i =1/0;
         }
     }
 
